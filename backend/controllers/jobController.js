@@ -1,150 +1,341 @@
-let jobs = [
-    {
-        id: 1,
-        title: 'Full Stack Developer',
-        company: 'Tech Innovations',
-        location: 'Lahore, Pakistan',
-        description: 'Looking for experienced full stack developer with React and Node.js skills.',
-        requirements: ['React.js', 'Node.js', 'MongoDB', '2+ years experience'],
-        salary: 'PKR 80,000 - 120,000',
-        type: 'Full-time',
-        postedBy: 1,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-    },
-    {
-        id: 2,
-        title: 'Marketing Specialist',
-        company: 'Digital Solutions',
-        location: 'Islamabad, Pakistan',
-        description: 'Seeking creative marketing specialist for digital campaigns.',
-        requirements: ['Digital Marketing', 'SEO/SEM', 'Content Creation', '1+ years experience'],
-        salary: 'PKR 60,000 - 90,000',
-        type: 'Full-time',
-        postedBy: 2,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-    }
-];
+const Job = require('../models/Job');
+const Alumni = require('../models/Alumni');
 
-let nextJobId = 3;
+// GET /api/jobs - Get all jobs with filtering and pagination
+const getAllJobs = async (req, res) => {
+    try {
+        const { 
+            category,
+            jobType,
+            experienceLevel,
+            location,
+            search,
+            page = 1,
+            limit = 10,
+            sortBy = 'createdAt',
+            sortOrder = 'desc'
+        } = req.query;
 
-const jobController = {
-    getAllJobs: (req, res) => {
-        try {
-            res.status(200).json({
-                success: true,
-                count: jobs.length,
-                data: jobs
-            });
-        } catch (error) {
-            res.status(500).json({
-                success: false,
-                error: 'Internal server error'
-            });
+        // Build filter object
+        const filter = { isActive: true };
+        
+        if (category && category !== 'all') {
+            filter.category = category;
         }
-    },
-
-    getJobById: (req, res) => {
-        try {
-            const { id } = req.params;
-            const job = jobs.find(j => j.id == id);
-
-            if (!job) {
-                return res.status(404).json({
-                    success: false,
-                    error: 'Job not found'
-                });
-            }
-
-            res.status(200).json({
-                success: true,
-                data: job
-            });
-        } catch (error) {
-            res.status(500).json({
-                success: false,
-                error: 'Internal server error'
-            });
+        
+        if (jobType) {
+            filter.jobType = jobType;
         }
-    },
-
-    createJob: (req, res) => {
-        try {
-            const newJob = {
-                id: nextJobId++,
-                ...req.body,
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-            };
-
-            jobs.push(newJob);
-
-            res.status(201).json({
-                success: true,
-                message: 'Job created successfully',
-                data: newJob
-            });
-        } catch (error) {
-            res.status(500).json({
-                success: false,
-                error: 'Internal server error'
-            });
+        
+        if (experienceLevel) {
+            filter.experienceLevel = experienceLevel;
         }
-    },
-
-    updateJob: (req, res) => {
-        try {
-            const { id } = req.params;
-            const index = jobs.findIndex(j => j.id == id);
-
-            if (index === -1) {
-                return res.status(404).json({
-                    success: false,
-                    error: 'Job not found'
-                });
-            }
-
-            jobs[index] = {
-                ...jobs[index],
-                ...req.body,
-                updatedAt: new Date().toISOString()
-            };
-
-            res.status(200).json({
-                success: true,
-                message: 'Job updated successfully',
-                data: jobs[index]
-            });
-        } catch (error) {
-            res.status(500).json({
-                success: false,
-                error: 'Internal server error'
-            });
+        
+        if (location) {
+            filter.location = new RegExp(location, 'i');
         }
-    },
-
-    deleteJob: (req, res) => {
-        try {
-            const { id } = req.params;
-            const index = jobs.findIndex(j => j.id == id);
-
-            if (index === -1) {
-                return res.status(404).json({
-                    success: false,
-                    error: 'Job not found'
-                });
-            }
-
-            jobs.splice(index, 1);
-            res.status(204).send();
-        } catch (error) {
-            res.status(500).json({
-                success: false,
-                error: 'Internal server error'
-            });
+        
+        // Text search across multiple fields
+        if (search) {
+            filter.$or = [
+                { title: new RegExp(search, 'i') },
+                { company: new RegExp(search, 'i') },
+                { description: new RegExp(search, 'i') },
+                { location: new RegExp(search, 'i') }
+            ];
         }
+
+        // Calculate pagination
+        const pageNum = parseInt(page);
+        const limitNum = parseInt(limit);
+        const skip = (pageNum - 1) * limitNum;
+
+        // Build sort object
+        const sort = {};
+        sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
+
+        // Execute query with pagination and population
+        const jobs = await Job.find(filter)
+            .populate('postedBy', 'name email company currentPosition')
+            .sort(sort)
+            .skip(skip)
+            .limit(limitNum)
+            .select('-__v');
+
+        // Get total count for pagination
+        const total = await Job.countDocuments(filter);
+        const totalPages = Math.ceil(total / limitNum);
+
+        res.status(200).json({
+            success: true,
+            count: jobs.length,
+            total,
+            page: pageNum,
+            totalPages,
+            hasNextPage: pageNum < totalPages,
+            hasPrevPage: pageNum > 1,
+            data: jobs
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Error retrieving jobs',
+            error: error.message
+        });
     }
 };
 
-module.exports = jobController;
+// GET /api/jobs/:id - Get job by ID
+const getJobById = async (req, res) => {
+    try {
+        const job = await Job.findById(req.params.id)
+            .populate('postedBy', 'name email company currentPosition profileImage')
+            .select('-__v');
+
+        if (!job) {
+            return res.status(404).json({
+                success: false,
+                message: 'Job not found'
+            });
+        }
+
+        // Increment view count
+        await Job.findByIdAndUpdate(req.params.id, { $inc: { views: 1 } });
+
+        res.status(200).json({
+            success: true,
+            data: job
+        });
+    } catch (error) {
+        if (error.name === 'CastError') {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid job ID format'
+            });
+        }
+        
+        res.status(500).json({
+            success: false,
+            message: 'Error retrieving job',
+            error: error.message
+        });
+    }
+};
+
+// POST /api/jobs - Create new job
+const createJob = async (req, res) => {
+    try {
+        // Verify that the postedBy alumni exists
+        if (req.body.postedBy) {
+            const alumni = await Alumni.findById(req.body.postedBy);
+            if (!alumni) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid alumni ID for postedBy field'
+                });
+            }
+        }
+
+        const job = new Job(req.body);
+        const savedJob = await job.save();
+        
+        // Populate the postedBy field for response
+        await savedJob.populate('postedBy', 'name email company');
+
+        res.status(201).json({
+            success: true,
+            message: 'Job created successfully',
+            data: savedJob
+        });
+    } catch (error) {
+        if (error.name === 'ValidationError') {
+            const errors = Object.values(error.errors).map(err => err.message);
+            return res.status(400).json({
+                success: false,
+                message: 'Validation failed',
+                errors
+            });
+        }
+
+        res.status(500).json({
+            success: false,
+            message: 'Error creating job',
+            error: error.message
+        });
+    }
+};
+
+// PUT /api/jobs/:id - Update job
+const updateJob = async (req, res) => {
+    try {
+        // Verify that the postedBy alumni exists if being updated
+        if (req.body.postedBy) {
+            const alumni = await Alumni.findById(req.body.postedBy);
+            if (!alumni) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid alumni ID for postedBy field'
+                });
+            }
+        }
+
+        const job = await Job.findByIdAndUpdate(
+            req.params.id,
+            req.body,
+            {
+                new: true,
+                runValidators: true
+            }
+        ).populate('postedBy', 'name email company').select('-__v');
+
+        if (!job) {
+            return res.status(404).json({
+                success: false,
+                message: 'Job not found'
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Job updated successfully',
+            data: job
+        });
+    } catch (error) {
+        if (error.name === 'ValidationError') {
+            const errors = Object.values(error.errors).map(err => err.message);
+            return res.status(400).json({
+                success: false,
+                message: 'Validation failed',
+                errors
+            });
+        }
+        
+        if (error.name === 'CastError') {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid job ID format'
+            });
+        }
+
+        res.status(500).json({
+            success: false,
+            message: 'Error updating job',
+            error: error.message
+        });
+    }
+};
+
+// DELETE /api/jobs/:id - Delete job (soft delete)
+const deleteJob = async (req, res) => {
+    try {
+        const job = await Job.findByIdAndUpdate(
+            req.params.id,
+            { isActive: false },
+            { new: true }
+        );
+
+        if (!job) {
+            return res.status(404).json({
+                success: false,
+                message: 'Job not found'
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            message: 'Job deleted successfully'
+        });
+    } catch (error) {
+        if (error.name === 'CastError') {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid job ID format'
+            });
+        }
+
+        res.status(500).json({
+            success: false,
+            message: 'Error deleting job',
+            error: error.message
+        });
+    }
+};
+
+// GET /api/jobs/stats - Get job statistics
+const getJobStats = async (req, res) => {
+    try {
+        const stats = await Job.aggregate([
+            { $match: { isActive: true } },
+            {
+                $group: {
+                    _id: '$category',
+                    count: { $sum: 1 },
+                    avgViews: { $avg: '$views' },
+                    totalApplications: { $sum: '$applications' },
+                    avgMinSalary: { $avg: '$salary.min' },
+                    avgMaxSalary: { $avg: '$salary.max' }
+                }
+            },
+            { $sort: { count: -1 } }
+        ]);
+
+        // Job type distribution
+        const jobTypeStats = await Job.aggregate([
+            { $match: { isActive: true } },
+            {
+                $group: {
+                    _id: '$jobType',
+                    count: { $sum: 1 }
+                }
+            },
+            { $sort: { count: -1 } }
+        ]);
+
+        // Experience level distribution
+        const experienceStats = await Job.aggregate([
+            { $match: { isActive: true } },
+            {
+                $group: {
+                    _id: '$experienceLevel',
+                    count: { $sum: 1 }
+                }
+            },
+            { $sort: { count: -1 } }
+        ]);
+
+        // Recent jobs (last 30 days)
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        
+        const recentJobsCount = await Job.countDocuments({
+            isActive: true,
+            createdAt: { $gte: thirtyDaysAgo }
+        });
+
+        res.status(200).json({
+            success: true,
+            data: {
+                byCategory: stats,
+                byJobType: jobTypeStats,
+                byExperience: experienceStats,
+                recentJobs: recentJobsCount,
+                totalActiveJobs: await Job.countDocuments({ isActive: true })
+            }
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: 'Error retrieving job statistics',
+            error: error.message
+        });
+    }
+};
+
+module.exports = {
+    getAllJobs,
+    getJobById,
+    createJob,
+    updateJob,
+    deleteJob,
+    getJobStats
+};

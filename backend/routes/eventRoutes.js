@@ -1,96 +1,92 @@
 const express = require('express');
 const router = express.Router();
+const { validateId } = require('../middleware/validator');
+const {
+    getAllEvents,
+    getEventById,
+    createEvent,
+    updateEvent,
+    deleteEvent,
+    registerForEvent,
+    getEventStats
+} = require('../controllers/eventController');
 
-// GET all events
-router.get('/', (req, res) => {
-    res.status(200).json({
-        success: true,
-        message: 'Events retrieved successfully',
-        data: [
-            {
-                id: 1,
-                title: 'Alumni Meetup 2025',
-                description: 'Annual alumni gathering',
-                date: '2025-07-15',
-                location: 'Main Campus',
-                capacity: 100
-            },
-            {
-                id: 2,
-                title: 'Career Fair',
-                description: 'Job opportunities for alumni',
-                date: '2025-08-20',
-                location: 'Convention Center',
-                capacity: 200
-            }
-        ]
-    });
-});
+// Validation middleware for events
+const validateEvent = (req, res, next) => {
+    const { title, description, date, time, location, category, maxAttendees, organizer, organizerContact } = req.body;
+    const errors = [];
 
-// GET single event by ID
-router.get('/:id', (req, res) => {
-    const { id } = req.params;
-    res.status(200).json({
-        success: true,
-        message: `Event ${id} retrieved successfully`,
-        data: {
-            id: parseInt(id),
-            title: 'Sample Event',
-            description: 'This is a sample event description',
-            date: '2025-07-15',
-            location: 'Sample Location',
-            capacity: 50
+    if (!title || title.trim() === '') {
+        errors.push('Event title is required');
+    }
+
+    if (!description || description.trim() === '') {
+        errors.push('Event description is required');
+    }
+
+    if (!date) {
+        errors.push('Event date is required');
+    } else {
+        const eventDate = new Date(date);
+        if (eventDate <= new Date()) {
+            errors.push('Event date must be in the future');
         }
-    });
-});
+    }
 
-// POST create new event
-router.post('/', (req, res) => {
-    const { title, description, date, location, capacity } = req.body;
-    
-    res.status(201).json({
-        success: true,
-        message: 'Event created successfully',
-        data: {
-            id: Date.now(),
-            title: title || 'New Event',
-            description: description || 'Event description',
-            date: date || new Date().toISOString(),
-            location: location || 'TBD',
-            capacity: capacity || 50,
-            createdAt: new Date().toISOString()
-        }
-    });
-});
+    if (!time || !time.match(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/)) {
+        errors.push('Valid event time is required (HH:MM format)');
+    }
 
-// PUT update event
-router.put('/:id', (req, res) => {
-    const { id } = req.params;
-    const { title, description, date, location, capacity } = req.body;
-    
-    res.status(200).json({
-        success: true,
-        message: `Event ${id} updated successfully`,
-        data: {
-            id: parseInt(id),
-            title: title || 'Updated Event',
-            description: description || 'Updated description',
-            date: date || new Date().toISOString(),
-            location: location || 'Updated Location',
-            capacity: capacity || 50,
-            updatedAt: new Date().toISOString()
-        }
-    });
-});
+    if (!location || location.trim() === '') {
+        errors.push('Event location is required');
+    }
 
-// DELETE event
-router.delete('/:id', (req, res) => {
-    const { id } = req.params;
-    res.status(200).json({
-        success: true,
-        message: `Event ${id} deleted successfully`,
-        deletedId: parseInt(id)
-    });
-});
+    if (!category) {
+        errors.push('Event category is required');
+    }
+
+    if (!maxAttendees || maxAttendees < 1) {
+        errors.push('Maximum attendees must be at least 1');
+    }
+
+    if (!organizer || organizer.trim() === '') {
+        errors.push('Event organizer is required');
+    }
+
+    if (!organizerContact || !organizerContact.email) {
+        errors.push('Organizer contact email is required');
+    }
+
+    if (errors.length > 0) {
+        return res.status(400).json({
+            success: false,
+            message: 'Validation failed',
+            errors: errors
+        });
+    }
+
+    next();
+};
+
+// GET /api/events/stats - Get event statistics
+router.get('/stats', getEventStats);
+
+// GET /api/events - Get all events with filtering and pagination
+router.get('/', getAllEvents);
+
+// GET /api/events/:id - Get single event by ID
+router.get('/:id', validateId, getEventById);
+
+// POST /api/events - Create new event
+router.post('/', validateEvent, createEvent);
+
+// PUT /api/events/:id - Update event
+router.put('/:id', validateId, validateEvent, updateEvent);
+
+// DELETE /api/events/:id - Delete event (soft delete)
+router.delete('/:id', validateId, deleteEvent);
+
+// POST /api/events/:id/register - Register for event
+router.post('/:id/register', validateId, registerForEvent);
 
 module.exports = router;

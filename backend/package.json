@@ -7,14 +7,18 @@
     "start": "nodemon app.js",
     "dev": "nodemon app.js",
     "prod": "node app.js",
-    "test": "node nodeConcepts.js"
+    "test": "node nodeConcepts.js",
+    "mongo-demo": "node mongoClientDemo.js",
+    "aggregate-demo": "node aggregateDemo.js"
   },
   "keywords": [
     "alumni",
     "portal",
     "api",
     "express",
-    "nodejs"
+    "nodejs",
+    "mongodb",
+    "mongoose"
   ],
   "author": "Mariyam",
   "license": "Namal",
@@ -22,7 +26,10 @@
     "body-parser": "^1.20.2",
     "cors": "^2.8.5",
     "express": "^4.18.2",
-    "express-validator": "^7.2.1"
+    "express-validator": "^7.2.1",
+    "mongoose": "^8.0.3",
+    "mongodb": "^6.3.0",
+    "dotenv": "^16.3.1"
   },
   "devDependencies": {
     "nodemon": "^3.1.10"

@@ -1,90 +1,31 @@
-
 const express = require('express');
 const router = express.Router();
-
-// ✅ Correct - Destructure the validation functions
 const { validateJob, validateId } = require('../middleware/validator');
+const {
+    getAllJobs,
+    getJobById,
+    createJob,
+    updateJob,
+    deleteJob,
+    getJobStats
+} = require('../controllers/jobController');
 
-// GET all jobs
-router.get('/', (req, res) => {
-    try {
-        res.status(200).json({
-            success: true,
-            message: 'Jobs retrieved successfully',
-            data: [] // Your jobs data here
-        });
-    } catch (error) {
-        res.status(500).json({
-            success: false,
-            error: 'Failed to retrieve jobs'
-        });
-    }
-});
+// GET /api/jobs/stats - Get job statistics
+router.get('/stats', getJobStats);
 
-// GET single job by ID
-router.get('/:id', validateId, (req, res) => {
-    try {
-        const { id } = req.params;
-        res.status(200).json({
-            success: true,
-            message: `Job ${id} retrieved successfully`,
-            data: {} // Your job data here
-        });
-    } catch (error) {
-        res.status(500).json({
-            success: false,
-            error: 'Failed to retrieve job'
-        });
-    }
-});
+// GET /api/jobs - Get all jobs with filtering and pagination
+router.get('/', getAllJobs);
 
-// POST create new job
-router.post('/', validateJob, (req, res) => {
-    try {
-        res.status(201).json({
-            success: true,
-            message: 'Job created successfully',
-            data: req.body
-        });
-    } catch (error) {
-        res.status(500).json({
-            success: false,
-            error: 'Failed to create job'
-        });
-    }
-});
+// GET /api/jobs/:id - Get single job by ID
+router.get('/:id', validateId, getJobById);
 
-// PUT update job
-router.put('/:id', validateId, validateJob, (req, res) => {
-    try {
-        const { id } = req.params;
-        res.status(200).json({
-            success: true,
-            message: `Job ${id} updated successfully`,
-            data: req.body
-        });
-    } catch (error) {
-        res.status(500).json({
-            success: false,
-            error: 'Failed to update job'
-        });
-    }
-});
+// POST /api/jobs - Create new job
+router.post('/', validateJob, createJob);
 
-// DELETE job
-router.delete('/:id', validateId, (req, res) => {
-    try {
-        const { id } = req.params;
-        res.status(200).json({
-            success: true,
-            message: `Job ${id} deleted successfully`
-        });
-    } catch (error) {
-        res.status(500).json({
-            success: false,
-            error: 'Failed to delete job'
-        });
-    }
-});
+// PUT /api/jobs/:id - Update job
+router.put('/:id', validateId, validateJob, updateJob);
+
+// DELETE /api/jobs/:id - Delete job (soft delete)
+router.delete('/:id', validateId, deleteJob);
 
 module.exports = router;
